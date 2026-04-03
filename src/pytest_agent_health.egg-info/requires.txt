@@ -1,0 +1,5 @@
+pytest>=7.0
+agent-failure-debugger>=0.3.1
+
+[langchain]
+agent-failure-debugger[langchain]

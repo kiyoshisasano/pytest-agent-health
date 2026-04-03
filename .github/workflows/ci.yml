@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Verify plugin registration
+        run: |
+          python -c "
+          import pytest_agent_health
+          print(f'Version: {pytest_agent_health.__version__}')
+
+          from pytest_agent_health.plugin import pytest_addoption, agent_health
+          from pytest_agent_health.policy import apply_policy, Verdict, RISK_SIGNALS, INFO_SIGNALS
+          from pytest_agent_health.reporting import format_verdict, format_summary
+          from pytest_agent_health.fixture import AgentHealthFixture
+          print('OK: all modules importable')
+          "
+
+      - name: Verify pytest discovers plugin
+        run: |
+          pytest --co -q 2>&1 | head -5
+          pytest -p pytest_agent_health.plugin --agent-health --co -q 2>&1 | head -5
+          echo "OK: plugin discovered"
+
+      - name: Policy logic test
+        run: |
+          python -c "
+          from pytest_agent_health.policy import apply_policy, Verdict
+
+          # healthy → PASS
+          diag = {'summary': {'execution_quality': {'status': 'healthy', 'indicators': [], 'termination': {'mode': 'normal'}, 'summary': ''}}, 'matcher_output': []}
+          item = apply_policy(diag)
+          assert item.verdict == Verdict.PASS_, f'Expected PASS, got {item.verdict}'
+
+          # failed → FAIL
+          diag['summary']['execution_quality']['status'] = 'failed'
+          item = apply_policy(diag)
+          assert item.verdict == Verdict.FAIL, f'Expected FAIL, got {item.verdict}'
+
+          # degraded default → WARN
+          diag['summary']['execution_quality']['status'] = 'degraded'
+          diag['summary']['execution_quality']['indicators'] = [{'signal': 'response.alignment_score', 'value': 0.3, 'concern': 'weak'}]
+          item = apply_policy(diag)
+          assert item.verdict == Verdict.WARN, f'Expected WARN, got {item.verdict}'
+
+          # degraded strict + risk → FAIL
+          item = apply_policy(diag, strict=True)
+          assert item.verdict == Verdict.FAIL, f'Expected FAIL with strict, got {item.verdict}'
+
+          # fail-on override
+          diag['summary']['execution_quality']['status'] = 'healthy'
+          diag['summary']['execution_quality']['indicators'] = []
+          diag['matcher_output'] = [{'failure_id': 'premature_termination', 'diagnosed': True, 'confidence': 0.8}]
+          item = apply_policy(diag, fail_on=frozenset({'premature_termination'}))
+          assert item.verdict == Verdict.FAIL, f'Expected FAIL from fail-on, got {item.verdict}'
+
+          print('OK: all policy assertions passed')
+          "
+
+      - name: Integration test (diagnose + policy)
+        run: |
+          python -c "
+          from agent_failure_debugger.diagnose import diagnose
+          from pytest_agent_health.policy import apply_policy, Verdict
+
+          # Healthy log
+          healthy = {
+              'inputs': {'query': 'What was Q3 revenue?'},
+              'outputs': {'response': 'Q3 revenue was 4.2M based on the earnings report.'},
+              'steps': [
+                  {'type': 'tool', 'name': 'search', 'inputs': {'q': 'Q3'},
+                   'outputs': {'revenue': '4.2M'}, 'error': None},
+                  {'type': 'llm', 'outputs': {'text': 'Q3 revenue was 4.2M.'}}
+              ]
+          }
+          result = diagnose(healthy, adapter='langchain')
+          item = apply_policy(result)
+          assert item.verdict == Verdict.PASS_, f'Healthy log: expected PASS, got {item.verdict}'
+
+          # Degraded log
+          degraded = {
+              'inputs': {'query': 'Change my flight'},
+              'outputs': {'response': 'Here are some hotels.'},
+              'steps': [
+                  {'type': 'tool', 'name': 'search', 'inputs': {'q': 'flights'},
+                   'outputs': {'flights': []}, 'error': None},
+                  {'type': 'tool', 'name': 'search', 'inputs': {'q': 'flights'},
+                   'outputs': {'flights': []}, 'error': None},
+                  {'type': 'tool', 'name': 'search', 'inputs': {'q': 'flights'},
+                   'outputs': {'flights': []}, 'error': None},
+                  {'type': 'llm', 'outputs': {'text': 'Here are some hotels.'}}
+              ],
+              'feedback': {'user_correction': 'I asked about flights.'}
+          }
+          result = diagnose(degraded, adapter='langchain')
+          item = apply_policy(result)
+          assert item.verdict == Verdict.WARN, f'Degraded log: expected WARN, got {item.verdict}'
+
+          # Same log with strict → FAIL
+          item = apply_policy(result, strict=True)
+          assert item.verdict == Verdict.FAIL, f'Degraded+strict: expected FAIL, got {item.verdict}'
+
+          print('OK: integration test passed')
+          "
