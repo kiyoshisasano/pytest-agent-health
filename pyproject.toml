@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pytest-agent-health"
+version = "0.1.0"
+description = "Catch silent agent failures in CI. Behavior lint for LLM agents, powered by agent-failure-debugger."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+dependencies = [
+    "pytest>=7.0",
+    "agent-failure-debugger>=0.3.1",
+]
+
+[project.optional-dependencies]
+langchain = ["agent-failure-debugger[langchain]"]
+
+[project.urls]
+Homepage = "https://github.com/kiyoshisasano/pytest-agent-health"
+
+[project.entry-points.pytest11]
+agent_health = "pytest_agent_health.plugin"
+
+[tool.setuptools.packages.find]
+where = ["src"]
