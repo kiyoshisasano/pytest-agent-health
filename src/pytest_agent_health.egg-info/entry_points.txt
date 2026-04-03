@@ -1,2 +1,0 @@
-[pytest11]
-agent_health = pytest_agent_health.plugin
