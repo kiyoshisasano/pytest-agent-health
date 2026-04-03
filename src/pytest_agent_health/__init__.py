@@ -14,4 +14,4 @@ Usage:
     pytest --agent-health --strict     # strict: degraded+risk = FAIL
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

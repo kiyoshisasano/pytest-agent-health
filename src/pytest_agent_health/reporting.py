@@ -108,3 +108,30 @@ def format_summary(items: list[VerdictItem]) -> str:
         parts.append(f"{passes} PASS")
 
     return f"agent-health: {total} checks — {', '.join(parts)}"
+
+
+def format_regression(regression) -> str:
+    """Format a RegressionResult as multi-line CI output.
+
+    Example:
+        🔄 REGRESSION DETECTED:
+          New failures: premature_termination, context_truncation_loss
+          Status change: healthy → degraded
+          New indicators: response.alignment_score
+    """
+    lines = ["🔄 REGRESSION DETECTED (compared to baseline):"]
+
+    if regression.new_failures:
+        lines.append(
+            f"  New failures: {', '.join(regression.new_failures)}"
+        )
+
+    if regression.status_change:
+        lines.append(f"  Status change: {regression.status_change}")
+
+    if regression.new_indicators:
+        lines.append(
+            f"  New indicators: {', '.join(regression.new_indicators)}"
+        )
+
+    return "\n".join(lines)

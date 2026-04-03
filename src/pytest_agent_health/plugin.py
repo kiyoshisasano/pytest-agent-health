@@ -54,6 +54,30 @@ def pytest_addoption(parser: pytest.Parser) -> None:
             "context_truncation_loss"
         ),
     )
+    group.addoption(
+        "--agent-health-baseline-dir",
+        type=str,
+        default=".agent-health",
+        help=(
+            "Directory for regression baselines. "
+            "Default: .agent-health/ in the project root."
+        ),
+    )
+    group.addoption(
+        "--agent-health-update-baseline",
+        action="store_true",
+        default=False,
+        help=(
+            "Update baselines with current results. "
+            "Run this after fixing regressions to set a new baseline."
+        ),
+    )
+    group.addoption(
+        "--agent-health-no-baseline",
+        action="store_true",
+        default=False,
+        help="Disable regression detection (skip baseline comparison).",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +97,8 @@ def agent_health(request: pytest.FixtureRequest) -> AgentHealthFixture:
         --agent-health      Enable the plugin
         --agent-health-strict  Strict policy (degraded+risk → FAIL)
         --agent-health-fail-on=...  Force FAIL on specific patterns
+        --agent-health-update-baseline  Save current results as baseline
+        --agent-health-no-baseline  Disable regression detection
     """
     config = request.config
 
@@ -83,6 +109,16 @@ def agent_health(request: pytest.FixtureRequest) -> AgentHealthFixture:
     fail_on = frozenset(
         p.strip() for p in fail_on_str.split(",") if p.strip()
     ) if fail_on_str else frozenset()
+
+    # Baseline configuration
+    no_baseline = config.getoption("--agent-health-no-baseline", default=False)
+    update_baseline = config.getoption("--agent-health-update-baseline", default=False)
+    baseline_dir = config.getoption("--agent-health-baseline-dir", default=".agent-health")
+
+    baseline_store = None
+    if not no_baseline:
+        from pytest_agent_health.baseline import BaselineStore
+        baseline_store = BaselineStore(baseline_dir)
 
     # Check for marker overrides
     marker = request.node.get_closest_marker("agent_health")
@@ -95,6 +131,9 @@ def agent_health(request: pytest.FixtureRequest) -> AgentHealthFixture:
     return AgentHealthFixture(
         strict=strict,
         fail_on=fail_on,
+        baseline_store=baseline_store,
+        test_id=request.node.nodeid,
+        update_baseline=update_baseline,
     )
 
 

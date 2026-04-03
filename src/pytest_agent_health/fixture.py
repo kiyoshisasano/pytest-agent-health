@@ -2,12 +2,17 @@
 fixture.py — The agent_health pytest fixture.
 
 Provides three methods:
-  - check(raw_log, adapter) — single-run diagnosis + CI verdict
+  - check(raw_log, adapter) — single-run diagnosis + CI verdict + regression detection
   - compare(logs, adapter) — multi-run stability check
   - diff(success_logs, failure_logs, adapter) — differential diagnosis
 
 Each method runs diagnose() internally and applies the CI policy.
 On FAIL, pytest.fail() is called. On WARN, pytest.warns() is issued.
+
+Regression detection:
+  When a BaselineStore is configured (default: .agent-health/),
+  check() automatically compares against the previous run's diagnosis.
+  New failure patterns or status degradation trigger FAIL.
 """
 
 from __future__ import annotations
@@ -22,7 +27,13 @@ from pytest_agent_health.policy import (
     Verdict,
     VerdictItem,
 )
-from pytest_agent_health.reporting import format_verdict
+from pytest_agent_health.reporting import format_verdict, format_regression
+from pytest_agent_health.baseline import (
+    BaselineStore,
+    RegressionResult,
+    extract_snapshot,
+    compare_to_baseline,
+)
 
 
 @dataclass
@@ -33,10 +44,16 @@ class AgentHealthFixture:
         strict: Whether to apply strict policy (default False).
         fail_on: Set of failure patterns that force FAIL.
         results: Accumulated results from all checks in this test.
+        baseline_store: Storage for regression baselines (None to disable).
+        test_id: pytest node ID for this test (set by plugin).
+        update_baseline: If True, save current result as new baseline.
     """
     strict: bool = False
     fail_on: frozenset[str] = field(default_factory=frozenset)
     results: list[VerdictItem] = field(default_factory=list)
+    baseline_store: BaselineStore | None = None
+    test_id: str = ""
+    update_baseline: bool = False
 
     def check(
         self,
@@ -45,6 +62,11 @@ class AgentHealthFixture:
         **diagnose_kwargs,
     ) -> dict:
         """Run diagnosis and apply CI policy.
+
+        When a baseline exists for this test, automatically compares
+        against it and fails on regression (new failures or status
+        degradation). The current result is saved as the new baseline
+        when --agent-health-update-baseline is set.
 
         Args:
             raw_log: Raw log from the agent.
@@ -55,11 +77,26 @@ class AgentHealthFixture:
             The full diagnosis result dict.
 
         Raises:
-            pytest.fail: If verdict is FAIL.
+            pytest.fail: If verdict is FAIL or regression detected.
         """
         from agent_failure_debugger.diagnose import diagnose as _diagnose
 
         result = _diagnose(raw_log, adapter=adapter, **diagnose_kwargs)
+
+        # --- Regression detection ---
+        regression = None
+        snapshot = extract_snapshot(result)
+
+        if self.baseline_store and self.test_id:
+            baseline = self.baseline_store.load(self.test_id)
+            if baseline is not None:
+                regression = compare_to_baseline(snapshot, baseline)
+
+            # Save new baseline if requested
+            if self.update_baseline:
+                self.baseline_store.save(self.test_id, snapshot)
+
+        # --- Policy verdict ---
         item = apply_policy(
             result,
             strict=self.strict,
@@ -68,6 +105,15 @@ class AgentHealthFixture:
         self.results.append(item)
 
         report = format_verdict(item)
+
+        # Regression overrides: even if policy says PASS/WARN,
+        # a regression is a FAIL
+        if regression and regression.has_regression:
+            regression_report = format_regression(regression)
+            pytest.fail(
+                f"Agent health check — regression detected:\n"
+                f"{report}\n{regression_report}"
+            )
 
         if item.verdict == Verdict.FAIL:
             pytest.fail(f"Agent health check failed:\n{report}")
