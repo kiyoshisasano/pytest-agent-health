@@ -87,7 +87,15 @@ def test_no_regression(agent_health):
 
 The plugin applies a CI-specific policy on top of execution quality:
 
-### Default (strict)
+### Default
+
+| Condition | Verdict | Rationale |
+|---|---|---|
+| `failed` | **FAIL** | Task incomplete, error, or silent exit |
+| `degraded` | **WARN** | Output produced but quality concerns detected |
+| `healthy` | **PASS** | No issues |
+
+### Strict (`--strict`)
 
 | Condition | Verdict | Rationale |
 |---|---|---|
@@ -95,14 +103,6 @@ The plugin applies a CI-specific policy on top of execution quality:
 | `degraded` + risk indicators | **FAIL** | Weak alignment, no tool data, hallucination signals |
 | `degraded` + info indicators only | **WARN** | Diagnostic limitations, not agent failure |
 | `healthy` | **PASS** | No issues |
-
-### Relaxed (`--no-strict`)
-
-| Condition | Verdict |
-|---|---|
-| `failed` | **FAIL** |
-| `degraded` | **WARN** |
-| `healthy` | **PASS** |
 
 ### Indicator classification
 
@@ -127,7 +127,7 @@ pytest --agent-health --agent-health-fail-on=premature_termination,context_trunc
 
 ```bash
 pytest --agent-health                    # Enable the plugin
-pytest --agent-health --no-strict        # Relaxed: degraded = WARN only
+pytest --agent-health --agent-health-strict  # Strict: degraded+risk = FAIL
 pytest --agent-health --agent-health-fail-on=premature_termination
 ```
 
@@ -138,8 +138,8 @@ pytest --agent-health --agent-health-fail-on=premature_termination
 Override policy per-test:
 
 ```python
-@pytest.mark.agent_health(strict=False)
-def test_experimental_agent(agent_health):
+@pytest.mark.agent_health(strict=True)
+def test_critical_flow(agent_health):
     agent_health.check(log, adapter="langchain")
 
 @pytest.mark.agent_health(fail_on=["premature_termination"])

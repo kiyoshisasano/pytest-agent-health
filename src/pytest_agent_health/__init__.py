@@ -10,8 +10,8 @@ Usage:
         agent_health.check(raw_log, adapter="langchain")
 
     # CLI
-    pytest --agent-health              # default: strict policy
-    pytest --agent-health --no-strict  # degraded = WARN only
+    pytest --agent-health              # default: degraded = WARN
+    pytest --agent-health --strict     # strict: degraded+risk = FAIL
 """
 
 __version__ = "0.1.0"

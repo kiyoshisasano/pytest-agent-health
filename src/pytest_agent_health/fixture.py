@@ -30,11 +30,11 @@ class AgentHealthFixture:
     """Fixture object providing agent health check methods.
 
     Attributes:
-        strict: Whether to apply strict policy (default True).
+        strict: Whether to apply strict policy (default False).
         fail_on: Set of failure patterns that force FAIL.
         results: Accumulated results from all checks in this test.
     """
-    strict: bool = True
+    strict: bool = False
     fail_on: frozenset[str] = field(default_factory=frozenset)
     results: list[VerdictItem] = field(default_factory=list)
 

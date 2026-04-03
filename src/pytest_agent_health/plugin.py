@@ -35,13 +35,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Enable agent health checks (required to activate the plugin).",
     )
     group.addoption(
-        "--no-strict",
+        "--agent-health-strict",
         action="store_true",
         default=False,
         help=(
-            "Relax policy: degraded status always produces WARN, "
-            "never FAIL. Default (strict): degraded with risk "
-            "indicators produces FAIL."
+            "Strict policy: degraded status with risk indicators "
+            "produces FAIL. Default: degraded always produces WARN."
         ),
     )
     group.addoption(
@@ -72,13 +71,13 @@ def agent_health(request: pytest.FixtureRequest) -> AgentHealthFixture:
 
     The fixture respects CLI options:
         --agent-health      Enable the plugin
-        --no-strict         Relax degraded policy
+        --agent-health-strict  Strict policy (degraded+risk → FAIL)
         --agent-health-fail-on=...  Force FAIL on specific patterns
     """
     config = request.config
 
     # Parse CLI options
-    strict = not config.getoption("--no-strict", default=False)
+    strict = config.getoption("--agent-health-strict", default=False)
 
     fail_on_str = config.getoption("--agent-health-fail-on", default="")
     fail_on = frozenset(

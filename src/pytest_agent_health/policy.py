@@ -111,15 +111,15 @@ class VerdictItem:
 def apply_policy(
     diagnosis_result: dict,
     *,
-    strict: bool = True,
+    strict: bool = False,
     fail_on: frozenset[str] | None = None,
 ) -> VerdictItem:
     """Apply CI policy to a diagnosis result.
 
     Args:
         diagnosis_result: Output of agent_failure_debugger.diagnose().
-        strict: If True (default), degraded + risk indicators → FAIL.
-            If False, degraded → WARN regardless of indicator type.
+        strict: If True, degraded + risk indicators → FAIL.
+            Default False: degraded → WARN regardless of indicator type.
         fail_on: Set of failure pattern IDs that trigger unconditional FAIL.
             Overrides execution_quality status.
 
