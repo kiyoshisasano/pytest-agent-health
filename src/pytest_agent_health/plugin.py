@@ -4,7 +4,7 @@ plugin.py — pytest plugin entry point.
 Registered via pyproject.toml [project.entry-points.pytest11].
 Provides:
   - --agent-health CLI flag (enables the plugin)
-  - --no-strict flag (relaxes degraded policy)
+  - --agent-health-strict flag (opt-in strict degraded policy)
   - --agent-health-fail-on (force FAIL on specific patterns)
   - agent_health fixture
   - Terminal summary reporting

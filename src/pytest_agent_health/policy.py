@@ -11,15 +11,15 @@ The debugger produces a diagnosis with execution_quality status
 applies a CI-specific policy to convert those into actionable verdicts.
 
 Two policy modes:
-    strict (default):
+    default:
+        failed → FAIL
+        degraded → WARN
+        healthy → PASS
+
+    strict (--agent-health-strict):
         failed → FAIL
         degraded + risk indicators → FAIL
         degraded + info indicators only → WARN
-        healthy → PASS
-
-    relaxed (--no-strict):
-        failed → FAIL
-        degraded → WARN
         healthy → PASS
 
 Additionally, --agent-health-fail-on overrides the policy: if any

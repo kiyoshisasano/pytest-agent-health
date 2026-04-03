@@ -7,8 +7,33 @@ name = "pytest-agent-health"
 version = "0.1.0"
 description = "Catch silent agent failures in CI. Behavior lint for LLM agents, powered by agent-failure-debugger."
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.11"
+authors = [
+    {name = "Kiyoshi Sasano"},
+]
+keywords = [
+    "pytest",
+    "llm",
+    "agent",
+    "testing",
+    "ci",
+    "failure-detection",
+    "lint",
+    "langgraph",
+    "langchain",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: Pytest",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Software Development :: Quality Assurance",
+]
 dependencies = [
     "pytest>=7.0",
     "agent-failure-debugger>=0.3.1",
@@ -19,6 +44,8 @@ langchain = ["agent-failure-debugger[langchain]"]
 
 [project.urls]
 Homepage = "https://github.com/kiyoshisasano/pytest-agent-health"
+Repository = "https://github.com/kiyoshisasano/pytest-agent-health"
+Issues = "https://github.com/kiyoshisasano/pytest-agent-health/issues"
 
 [project.entry-points.pytest11]
 agent_health = "pytest_agent_health.plugin"

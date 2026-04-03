@@ -1,0 +1,6 @@
+include LICENSE
+include README.md
+recursive-include src *.py
+recursive-include examples *.py
+prune tests
+prune __pycache__
