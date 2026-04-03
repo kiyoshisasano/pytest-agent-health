@@ -10,8 +10,8 @@ pip install pytest-agent-health
 def test_agent_answers_correctly(agent_health):
     raw_log = my_agent.run("What was Q3 revenue?")
     agent_health.check(raw_log, adapter="langchain")
-    # → FAIL if execution failed or quality degraded
-    # → WARN if minor concerns detected
+    # → FAIL if execution failed or regression detected
+    # → WARN if quality concerns detected
     # → PASS if healthy
 ```
 
@@ -27,7 +27,11 @@ def test_agent():
     assert response is not None  # PASSES — but agent just said "I can help!"
 ```
 
-The agent produced a response, so assertions pass. But it never actually booked anything. pytest-agent-health detects this by analyzing the execution trace — tool usage, grounding, alignment, termination behavior — and fails the test when the agent silently broke.
+The agent produced a response, so assertions pass. But it never actually booked anything.
+
+Worse: the agent worked yesterday but silently broke today. The same test passes both times because `assert response is not None` doesn't check behavior — only existence.
+
+pytest-agent-health solves both problems: it detects silent failures by analyzing execution traces, and it catches regressions by comparing against previous CI runs.
 
 ---
 
@@ -36,9 +40,12 @@ The agent produced a response, so assertions pass. But it never actually booked 
 ```
 agent log → diagnose() → execution_quality → CI policy → FAIL / WARN / PASS
                 (debugger)                     (plugin)
+                                                  ↕
+                                           baseline comparison
+                                          (regression detection)
 ```
 
-The plugin wraps [agent-failure-debugger](https://github.com/kiyoshisasano/agent-failure-debugger), which detects 17 failure patterns using deterministic causal analysis (no ML). The CI policy layer converts diagnosis results into test verdicts.
+The plugin wraps [agent-failure-debugger](https://github.com/kiyoshisasano/agent-failure-debugger), which detects 17 failure patterns using deterministic causal analysis (no ML). The CI policy layer converts diagnosis results into test verdicts. Baseline comparison detects regressions across CI runs — a capability that single-run diagnosis cannot provide.
 
 ---
 
@@ -62,6 +69,37 @@ If the agent's execution is `failed` or `degraded` with risk indicators, the tes
     → output alignment with user intent is weak
 ```
 
+### Regression detection (automatic)
+
+When `--agent-health-update-baseline` is set, each `check()` saves a diagnosis snapshot. On subsequent runs, the plugin automatically compares against the baseline and fails if regressions are detected:
+
+```
+🔄 REGRESSION DETECTED (compared to baseline):
+  New failures: incorrect_output
+  Status change: healthy → degraded
+  New indicators: response.alignment_score, grounding.tool_provided_data
+```
+
+Regressions are detected when:
+- New failure patterns appear that didn't exist in the baseline
+- Execution status degrades (healthy → degraded, degraded → failed)
+- New risk indicators appear
+
+Workflow:
+
+```bash
+# First run: establish baselines
+pytest --agent-health --agent-health-update-baseline
+
+# Subsequent runs: detect regressions automatically
+pytest --agent-health
+
+# After fixing regressions: update baselines
+pytest --agent-health --agent-health-update-baseline
+```
+
+Baselines are stored in `.agent-health/` (one JSON per test). Commit this directory to git to share baselines across CI runs.
+
 ### Multi-run stability
 
 ```python
@@ -71,10 +109,10 @@ def test_agent_consistency(agent_health):
     # → FAIL if root_cause_agreement < 1.0
 ```
 
-### Regression detection
+### Differential diagnosis
 
 ```python
-def test_no_regression(agent_health):
+def test_no_new_failures(agent_health):
     success_logs = load_baseline_logs()
     current_logs = [my_agent.run(q) for q in test_queries]
     agent_health.diff(success_logs, current_logs, adapter="langchain")
@@ -91,14 +129,16 @@ The plugin applies a CI-specific policy on top of execution quality:
 
 | Condition | Verdict | Rationale |
 |---|---|---|
+| Regression detected | **FAIL** | New failures or status degradation vs baseline |
 | `failed` | **FAIL** | Task incomplete, error, or silent exit |
 | `degraded` | **WARN** | Output produced but quality concerns detected |
 | `healthy` | **PASS** | No issues |
 
-### Strict (`--strict`)
+### Strict (`--agent-health-strict`)
 
 | Condition | Verdict | Rationale |
 |---|---|---|
+| Regression detected | **FAIL** | New failures or status degradation vs baseline |
 | `failed` | **FAIL** | Task incomplete, error, or silent exit |
 | `degraded` + risk indicators | **FAIL** | Weak alignment, no tool data, hallucination signals |
 | `degraded` + info indicators only | **WARN** | Diagnostic limitations, not agent failure |
@@ -126,9 +166,12 @@ pytest --agent-health --agent-health-fail-on=premature_termination,context_trunc
 ## CLI Options
 
 ```bash
-pytest --agent-health                    # Enable the plugin
-pytest --agent-health --agent-health-strict  # Strict: degraded+risk = FAIL
+pytest --agent-health                          # Enable the plugin
+pytest --agent-health --agent-health-strict    # Strict: degraded+risk = FAIL
 pytest --agent-health --agent-health-fail-on=premature_termination
+pytest --agent-health --agent-health-update-baseline   # Save current as baseline
+pytest --agent-health --agent-health-no-baseline       # Skip regression detection
+pytest --agent-health --agent-health-baseline-dir=path # Custom baseline directory
 ```
 
 ---
@@ -143,7 +186,7 @@ def test_critical_flow(agent_health):
     agent_health.check(log, adapter="langchain")
 
 @pytest.mark.agent_health(fail_on=["premature_termination"])
-def test_critical_flow(agent_health):
+def test_must_not_terminate_early(agent_health):
     agent_health.check(log, adapter="langchain")
 ```
 
